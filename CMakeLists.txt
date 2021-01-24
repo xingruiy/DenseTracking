@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.0)
 set(LNAME DenseTracking)
-project(${LNAME} LANGUAGES CXX CUDA)
+set(RVER 0.1)
+set(GSPACE XYUTILS)
+project(${LNAME} 
+VERSION ${RVER} 
+LANGUAGES CXX CUDA)
 
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -42,7 +46,7 @@ CONFIGURATIONS Release)
 install(
 EXPORT ${LNAME}-export
 FILE ${LNAME}Config.cmake
-NAMESPACE XYUTILS::
+NAMESPACE ${GSPACE}::
 DESTINATION lib/cmake/${LNAME})
 
 install(
