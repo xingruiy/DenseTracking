@@ -77,7 +77,7 @@ int main(int argc, char **argv)
     Eigen::Matrix3f K;
     K << 577.59, 0, 318.90, 0, 578.729, 242.68, 0, 0, 1;
     dt::DenseTracker tracker(
-        w, h, K, 5, true, true, 5.0, 16, 0.7);
+        w, h, K, 5, true, false, 5.0, 8, 0.7);
 
     cv::Mat ref_img = cv::imread("test/ref_rgb.jpg", -1);
     cv::Mat src_img = cv::imread("test/src_rgb.jpg", -1);

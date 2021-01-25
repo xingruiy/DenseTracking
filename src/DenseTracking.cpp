@@ -333,29 +333,34 @@ namespace dt
             {
                 Eigen::Map<Eigen::Matrix<double, 6, 6>> hessianMapped(hessian);
                 Eigen::Map<Eigen::Matrix<double, 6, 1>> residualMapped(residual);
+                Eigen::Map<Eigen::Matrix<double, 2, 1>> resSumMapped(resSum);
 
                 Eigen::Matrix<double, 6, 6> hessianBuffer;
                 Eigen::Matrix<double, 6, 1> residualBuffer;
+                Eigen::Matrix<double, 2, 1> resSumBuffer;
 
                 hessianMapped.setZero();
                 residualMapped.setZero();
+                resSumMapped.setZero();
 
                 float dw = depthWeight;
                 float rgbw = 1 - depthWeight;
 
                 ComputeResidualDepth(
-                    lvl, T, resSum,
+                    lvl, T, resSumBuffer.data(),
                     hessianBuffer.data(), residualBuffer.data());
 
                 hessianMapped += dw * dw * hessianBuffer;
                 residualMapped += dw * residualBuffer;
+                resSumMapped += dw * resSumBuffer;
 
                 ComputeResidualRGB(
-                    lvl, T, resSum,
+                    lvl, T, resSumBuffer.data(),
                     hessianBuffer.data(), residualBuffer.data());
 
                 hessianMapped += rgbw * rgbw * hessianBuffer;
                 residualMapped += rgbw * residualBuffer;
+                resSumMapped += rgbw * resSumBuffer;
 
                 mHessian = hessianMapped;
             }
