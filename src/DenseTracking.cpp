@@ -43,12 +43,15 @@ namespace dt
 
             RGBDFrameStruct source;
             RGBDFrameStruct reference;
+            float depthWeight;
 
             DenseTrackingImpl(int w, int h, Eigen::Matrix3f K,
                               int maxLvl, bool bRGB, bool bIcp,
-                              float clipping, float gradTh)
+                              float clipping, float gradTh,
+                              float weight)
                 : lvl_pyr(maxLvl), useRGB(bRGB), useICP(bIcp),
-                  depthClipping(clipping), gradThresh(gradTh)
+                  depthClipping(clipping), gradThresh(gradTh),
+                  depthWeight(weight)
             {
                 w_pyr.push_back(w);
                 h_pyr.push_back(h);
@@ -150,7 +153,8 @@ namespace dt
                     else
                         PyrDownImage(source.intensity[lvl - 1], source.intensity[lvl]);
 
-                    ComputeImageGradientCD(source.intensity[lvl], source.intensityGradX[lvl], source.intensityGradY[lvl]);
+                    // ComputeImageGradientCD(source.intensity[lvl], source.intensityGradX[lvl], source.intensityGradY[lvl]);
+                    GetGradientSobel(source.intensity[lvl], source.intensityGradX[lvl], source.intensityGradY[lvl]);
                 }
             }
 
@@ -194,17 +198,19 @@ namespace dt
                 int nSuccessfulIteration = 0;
 
                 Sophus::SE3d estimate = init;
-                Sophus::SE3d lastSuccessEstimate = estimate;
-                std::vector<int> vIterations = {10, 5, 3, 3, 3};
+                std::vector<int> vIterations = {15, 15, 15, 15, 15};
+                std::vector<float> incIterMin = {1e-8, 1e-8, 1e-8, 1e-8, 1e-8};
+                std::vector<float> LMStepInit = {0, 0, 0, 0, 0};
 
                 for (int lvl = lvl_pyr - 1; lvl >= maxLevel; --lvl)
                 {
-                    double resSum[2] = {0, 0};
+                    float LMStep = LMStepInit[lvl];
                     float lastError = std::numeric_limits<float>::max();
                     for (int iter = 0; iter < vIterations[lvl]; ++iter)
                     {
                         Eigen::Matrix<double, 6, 6> hessian = Eigen::Matrix<double, 6, 6>::Zero();
                         Eigen::Matrix<double, 6, 1> residual = Eigen::Matrix<double, 6, 1>::Zero();
+                        double resSum[2] = {0, 0};
 
                         if (useRGB && !useICP)
                             ComputeSingleStepRGB(
@@ -248,11 +254,11 @@ namespace dt
                                 hessian.data(),
                                 residual.data());
 
+                        for (int i = 0; i < 6; i++)
+                            hessian(i, i) *= 1 + LMStep;
+
                         float error = sqrt(resSum[0]) / (resSum[1] + 6);
                         auto update = hessian.ldlt().solve(residual);
-
-                        // std::cout << update << std::endl;
-                        // std::cout << resSum[0] << std::endl;
 
                         if (std::isnan(update(0)))
                         {
@@ -260,18 +266,24 @@ namespace dt
                             return Sophus::SE3d();
                         }
 
-                        estimate = Sophus::SE3d::exp(update) * estimate;
-
-                        // std::cout << hessian << std::endl;
-
-                        if (update.norm() < 1e-3)
-                            break;
-
                         if (error < lastError)
                         {
-                            lastSuccessEstimate = estimate;
+                            estimate = Sophus::SE3d::exp(update) * estimate;
+                            if (update.dot(update) < incIterMin[lvl])
+                                break;
                             lastError = error;
-                            nSuccessfulIteration++;
+
+                            if (LMStep < 0.2)
+                                LMStep = 0;
+                            else
+                                LMStep *= 0.5;
+                        }
+                        else
+                        {
+                            if (LMStep == 0)
+                                LMStep = 0.2;
+                            else
+                                LMStep *= 2;
                         }
 
                         nIteration++;
@@ -284,7 +296,7 @@ namespace dt
                 }
 
                 trackingGood = true;
-                return lastSuccessEstimate;
+                return estimate;
             }
 
             void SwapFrameBuffer()
@@ -307,6 +319,9 @@ namespace dt
                 Eigen::Matrix<double, 6, 6> hessianBuffer;
                 Eigen::Matrix<double, 6, 1> residualBuffer;
 
+                float dw = depthWeight;
+                float rgbw = 1 - depthWeight;
+
                 ComputeSingleStepDepth(
                     source.vmap[lvl],
                     source.nmap[lvl],
@@ -320,8 +335,8 @@ namespace dt
                     hessianBuffer.data(),
                     residualBuffer.data());
 
-                hessianMapped += w * w * hessianBuffer;
-                residualMapped += w * residualBuffer;
+                hessianMapped += dw * dw * hessianBuffer;
+                residualMapped += dw * residualBuffer;
 
                 ComputeSingleStepRGB(
                     source.intensity[lvl],
@@ -343,8 +358,8 @@ namespace dt
                     hessianBuffer.data(),
                     residualBuffer.data());
 
-                hessianMapped += hessianBuffer;
-                residualMapped += residualBuffer;
+                hessianMapped += rgbw * rgbw * hessianBuffer;
+                residualMapped += rgbw * residualBuffer;
 
                 mHessian = hessianMapped;
             }
@@ -372,9 +387,10 @@ namespace dt
 
     DenseTracker::DenseTracker(int w, int h, Eigen::Matrix3f K,
                                int maxLvl, bool bRGB, bool bIcp,
-                               float depthClipping, float gradTh)
+                               float depthClipping, float gradTh,
+                               float depthWeight)
         : impl(new internal::DenseTrackingImpl(w, h, K, maxLvl, bRGB,
-                                               bIcp, depthClipping, gradTh))
+                                               bIcp, depthClipping, gradTh, depthWeight))
     {
     }
 

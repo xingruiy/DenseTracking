@@ -17,7 +17,9 @@ namespace dt
     public:
         DenseTracker(int w, int h, Eigen::Matrix3f K,
                      int maxLvl, bool bRGB, bool bIcp,
-                     float depthClipping, float gradTh);
+                     float depthClipping, float gradTh,
+                     float depthWeight);
+
         void SetReferenceImage(const cv::Mat &imGray);
         void SetReferenceDepth(const cv::Mat &imDepth);
         void SetTrackingImage(const cv::Mat &imGray);

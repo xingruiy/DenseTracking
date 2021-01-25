@@ -1,5 +1,6 @@
 #include "CudaUtils.h"
 #include "ImageProc.h"
+#include <opencv2/cudafilters.hpp>
 
 #define DEPTH_MAX 8.f
 #define DEPTH_MIN 0.2f
@@ -41,6 +42,14 @@ void ComputeImageGradientCD(const cv::cuda::GpuMat image,
     dim3 grid(cv::divUp(image.cols, block.x), cv::divUp(image.rows, block.y));
 
     ComputeImageGradientCD_kernel<<<grid, block>>>(image, gx, gy);
+}
+
+void GetGradientSobel(cv::cuda::GpuMat img, cv::cuda::GpuMat &gx, cv::cuda::GpuMat &gy)
+{
+    auto sobelX = cv::cuda::createSobelFilter(CV_32FC1, CV_32FC1, 1, 0);
+    auto sobelY = cv::cuda::createSobelFilter(CV_32FC1, CV_32FC1, 0, 1);
+    sobelX->apply(img, gx);
+    sobelY->apply(img, gy);
 }
 
 __device__ __forceinline__ Eigen::Vector<uchar, 4> RenderPoint(

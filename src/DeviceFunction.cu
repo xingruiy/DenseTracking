@@ -187,8 +187,12 @@ namespace dt
                     wt = huberTh / abs(res(0));
                 }
 
-                float dx = wt * res(1);
-                float dy = wt * res(2);
+                float dx =   res(1);
+                float dy =   res(2);
+                wt*= 1.0/(4+dx*dx+dy*dy);
+                dx*=wt;
+                dy*=wt;
+
                 float r = wt * res(0);
 
                 row[0] = dx * fx * zInv;
