@@ -492,7 +492,7 @@ namespace dt
         RankUpdateHessian<6, 7>(hostData.ptr<float>(0), hessian, residual);
 
         res[0] = hostData.ptr<float>(0)[27];
-        res[1] = hostData.ptr<float>(0)[27];
+        res[1] = hostData.ptr<float>(0)[28];
     }
 
 } // namespace slam

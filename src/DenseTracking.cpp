@@ -206,54 +206,19 @@ namespace dt
                 {
                     float LMStep = LMStepInit[lvl];
                     float lastError = std::numeric_limits<float>::max();
+                    Eigen::Matrix<double, 6, 6> hessian = Eigen::Matrix<double, 6, 6>::Zero();
+                    Eigen::Matrix<double, 6, 1> residual = Eigen::Matrix<double, 6, 1>::Zero();
+                    double resSum[2] = {0, 0};
+
+                    if (useRGB && !useICP)
+                        ComputeResidualRGB(lvl, estimate, resSum, hessian.data(), residual.data());
+                    else if (!useRGB && useICP)
+                        ComputeResidualDepth(lvl, estimate, resSum, hessian.data(), residual.data());
+                    else
+                        ComputeResidualRGBD(lvl, estimate, resSum, hessian.data(), residual.data());
+
                     for (int iter = 0; iter < vIterations[lvl]; ++iter)
                     {
-                        Eigen::Matrix<double, 6, 6> hessian = Eigen::Matrix<double, 6, 6>::Zero();
-                        Eigen::Matrix<double, 6, 1> residual = Eigen::Matrix<double, 6, 1>::Zero();
-                        double resSum[2] = {0, 0};
-
-                        if (useRGB && !useICP)
-                            ComputeSingleStepRGB(
-                                source.intensity[lvl],
-                                reference.intensity[lvl],
-                                source.intensityGradX[lvl],
-                                source.intensityGradY[lvl],
-                                reference.vmap[lvl],
-                                estimate,
-                                K_pyr[lvl],
-                                gradThresh,
-                                bufferVec4HW,
-                                bufferFloat96x1,
-                                bufferFloat1x1,
-                                bufferFloat96x2,
-                                bufferFloat1x2,
-                                bufferFloat96x29,
-                                bufferFloat1x29,
-                                resSum,
-                                hessian.data(),
-                                residual.data());
-                        else if (!useRGB && useICP)
-                            ComputeSingleStepDepth(
-                                source.vmap[lvl],
-                                source.nmap[lvl],
-                                reference.vmap[lvl],
-                                reference.nmap[lvl],
-                                estimate,
-                                K_pyr[lvl],
-                                bufferFloat96x29,
-                                bufferFloat1x29,
-                                resSum,
-                                hessian.data(),
-                                residual.data());
-
-                        else
-                            ComputeSingleStepRGBDLinear(
-                                lvl,
-                                estimate,
-                                resSum,
-                                hessian.data(),
-                                residual.data());
-
                         for (int i = 0; i < 6; i++)
                             hessian(i, i) *= 1 + LMStep;
 
@@ -286,6 +251,13 @@ namespace dt
                                 LMStep *= 2;
                         }
 
+                        if (useRGB && !useICP)
+                            ComputeResidualRGB(lvl, estimate, resSum, hessian.data(), residual.data());
+                        else if (!useRGB && useICP)
+                            ComputeResidualDepth(lvl, estimate, resSum, hessian.data(), residual.data());
+                        else
+                            ComputeResidualRGBD(lvl, estimate, resSum, hessian.data(), residual.data());
+
                         nIteration++;
                     }
                 }
@@ -304,40 +276,13 @@ namespace dt
                 std::swap(reference, source);
             }
 
-            void ComputeSingleStepRGBDLinear(
+            void ComputeResidualRGB(
                 const int lvl,
                 const Sophus::SE3d &T,
                 double *resSum,
                 double *hessian,
                 double *residual)
             {
-                double w = 0.01;
-
-                Eigen::Map<Eigen::Matrix<double, 6, 6>> hessianMapped(hessian);
-                Eigen::Map<Eigen::Matrix<double, 6, 1>> residualMapped(residual);
-
-                Eigen::Matrix<double, 6, 6> hessianBuffer;
-                Eigen::Matrix<double, 6, 1> residualBuffer;
-
-                float dw = depthWeight;
-                float rgbw = 1 - depthWeight;
-
-                ComputeSingleStepDepth(
-                    source.vmap[lvl],
-                    source.nmap[lvl],
-                    reference.vmap[lvl],
-                    reference.nmap[lvl],
-                    T,
-                    K_pyr[lvl],
-                    bufferFloat96x29,
-                    bufferFloat1x29,
-                    resSum,
-                    hessianBuffer.data(),
-                    residualBuffer.data());
-
-                hessianMapped += dw * dw * hessianBuffer;
-                residualMapped += dw * residualBuffer;
-
                 ComputeSingleStepRGB(
                     source.intensity[lvl],
                     reference.intensity[lvl],
@@ -355,8 +300,59 @@ namespace dt
                     bufferFloat96x29,
                     bufferFloat1x29,
                     resSum,
-                    hessianBuffer.data(),
-                    residualBuffer.data());
+                    hessian,
+                    residual);
+            }
+
+            void ComputeResidualDepth(
+                const int lvl,
+                const Sophus::SE3d &T,
+                double *resSum,
+                double *hessian,
+                double *residual)
+            {
+                ComputeSingleStepDepth(
+                    source.vmap[lvl],
+                    source.nmap[lvl],
+                    reference.vmap[lvl],
+                    reference.nmap[lvl],
+                    T,
+                    K_pyr[lvl],
+                    bufferFloat96x29,
+                    bufferFloat1x29,
+                    resSum,
+                    hessian,
+                    residual);
+            }
+
+            void ComputeResidualRGBD(const int lvl,
+                                     const Sophus::SE3d &T,
+                                     double *resSum,
+                                     double *hessian,
+                                     double *residual)
+            {
+                Eigen::Map<Eigen::Matrix<double, 6, 6>> hessianMapped(hessian);
+                Eigen::Map<Eigen::Matrix<double, 6, 1>> residualMapped(residual);
+
+                Eigen::Matrix<double, 6, 6> hessianBuffer;
+                Eigen::Matrix<double, 6, 1> residualBuffer;
+
+                hessianMapped.setZero();
+                residualMapped.setZero();
+
+                float dw = depthWeight;
+                float rgbw = 1 - depthWeight;
+
+                ComputeResidualDepth(
+                    lvl, T, resSum,
+                    hessianBuffer.data(), residualBuffer.data());
+
+                hessianMapped += dw * dw * hessianBuffer;
+                residualMapped += dw * residualBuffer;
+
+                ComputeResidualRGB(
+                    lvl, T, resSum,
+                    hessianBuffer.data(), residualBuffer.data());
 
                 hessianMapped += rgbw * rgbw * hessianBuffer;
                 residualMapped += rgbw * residualBuffer;
