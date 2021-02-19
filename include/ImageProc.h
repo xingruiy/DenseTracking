@@ -18,5 +18,12 @@ namespace dt
 
     void GetGradientSobel(cv::cuda::GpuMat img, cv::cuda::GpuMat &gx, cv::cuda::GpuMat &gy);
     void ComputeImageGradientCD(const cv::cuda::GpuMat image, cv::cuda::GpuMat &gx, cv::cuda::GpuMat &gy);
+    void ComputeVertMap(const cv::cuda::GpuMat depth, cv::cuda::GpuMat &vmap,
+                        const Eigen::Matrix3f K, const float cut_off);
+    void SamplePixelsZbuffed(cv::cuda::GpuMat src_depth, cv::cuda::GpuMat src_color, cv::cuda::GpuMat dst_pts,
+                             cv::cuda::GpuMat &sampling_grid, cv::cuda::GpuMat &depth_samples,
+                             cv::cuda::GpuMat &color_samples, const Sophus::SE3d Tdst2src,
+                             const Eigen::Matrix3f K);
+   uint CUDACountImageNonZero(const cv::cuda::GpuMat image);
 
 } // namespace dt
